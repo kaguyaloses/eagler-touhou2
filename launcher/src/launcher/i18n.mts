@@ -576,7 +576,7 @@ const entries = [
   ["runtime.hostManifestMissingGame", "Site Manifest 缺少 {game}", "Site Manifest is missing {game}"],
   ["runtime.multiplayerRuntimeMissing", "当前 {game} 游戏资源不包含联机 Runtime", "The current {game} game package does not include a multiplayer Runtime"],
   ["runtime.dataDescriptorMissing", "{game}: Site Manifest 未提供游戏 DATA 描述", "{game}: Site Manifest does not provide a game DATA descriptor"],
-  ["package.invalidDataSize", "游戏数据包大小无效", "Invalid game-data package size"],
+  ["package.invalidDataSize", "游戏包大小无效（必须小于等于 1 GiB）", "Game package must be 1 GiB or smaller"],
   ["package.indexedDbUnavailable", "当前浏览器不支持持久化游戏数据导入：IndexedDB 不可用", "This browser cannot persist imported game data because IndexedDB is unavailable"],
   ["package.rawDataSizeMismatch", "{game} 原版数据大小不匹配：{actual}/{expected}", "{game} original data size mismatch: {actual}/{expected}"],
   ["package.validatingRawData", "正在校验 {game} 原版数据…", "Validating original {game} data…"],

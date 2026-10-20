@@ -263,6 +263,33 @@ test('import-only site accepts prepared Package ZIPs without private DATA hashes
     error => error.message === t('package.rawDataRequiresZip', {game: game.toUpperCase()}));
 });
 
+test('import-only site accepts prepared Package ZIPs larger than 256 MiB', async () => {
+  const game = 'th08', product = api.PRODUCT_GAMES[game], {manifest, layout} = importHost(game);
+  const files = {
+    'game-data': {source: 'content/th08.data', target: product.package.dataTarget, revision: 'a'.repeat(16), bytes: bytes.length},
+    'shared-msgothic': {source: 'shared/msgothic.ttc', target: '/msgothic.ttc', revision: 'b'.repeat(16), bytes: bytes.length},
+    'shared-unifont': {source: 'shared/unifont.otf', target: '/unifont.otf', revision: 'c'.repeat(16), bytes: bytes.length},
+  };
+  const descriptor = {schema: 'eagler-touhou/package/1', game, revision: 'd'.repeat(16),
+    runtimeRequirement: {protocol: 'eagler-touhou/1', target: game, dataFile: 'game-data', dataLayout: layout},
+    files, base: {files: Object.keys(files)}, components: {}};
+  let installs = 0;
+  const fixture = acquisitionFixture({current: null, hostValue: manifest, dependencies: {installZip: async parsed => {
+    installs++;
+    return {generation: {id: 'large-imported-th08', game, descriptor: parsed.descriptor,
+      files: Object.fromEntries(Object.keys(parsed.descriptor.files).map(id => [id, ref(id)]))}, installation: null};
+  }}});
+  const zip = zipSync({'package.json': strToU8(JSON.stringify(descriptor)),
+    'content/th08.data': bytes, 'shared/msgothic.ttc': bytes, 'shared/unifont.otf': bytes}, {level: 0});
+  class LargeReportedZip extends Blob {
+    #sizeReads = 0;
+    get size() {return this.#sizeReads++ === 0 ? 256 * 1024 * 1024 + 1 : super.size;}
+  }
+  const file = Object.assign(new LargeReportedZip([zip]), {name: 'th08-package.zip'});
+  await fixture.acquisition.importPackage({game, file});
+  assert.equal(installs, 1);
+});
+
 test('main 5948: hosted preload retains validated authority and asset URL without fake Package generation', async () => {
   const f = acquisitionFixture({current: null, hostValue: host()});
   const plan = await api.prepareFilePlan(gameInput(f));

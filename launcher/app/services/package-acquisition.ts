@@ -17,6 +17,8 @@ import type {CurrentPackageGeneration, InstalledPackageGeneration, PackageDescri
 import type {MusicMode} from '../../src/launcher/game-preferences.mts';
 import type {TransferPresentation} from '../../src/launcher/app-types.mts';
 import {createRawDataImportPackageDescriptor, rawDataImportHashMatches, rawDataImportMatchesFileName, rawDataImportSizeMatches} from '../../src/launcher/raw-data-import.mts';
+
+const MAX_GAME_PACKAGE_IMPORT_BYTES = 1024 * 1024 * 1024;
 import {sha256Hex} from '../../src/launcher/sha256.mts';
 import type {Translate} from '../i18n';
 import {GameDataAcquisitionError} from './game-data-acquisition';
@@ -246,7 +248,7 @@ export function createPackageAcquisition({metadata, baseUrl, translate: t, fetch
     const version = gameVersion ?? getGameVersion(game);
     const request = {onProgress};
     checkPreparationAbort(signal);
-    if (!(file instanceof Blob) || file.size <= 0 || file.size > 256 * 1024 * 1024) throw new Error(t('package.invalidDataSize'));
+    if (!(file instanceof Blob) || file.size <= 0 || file.size > MAX_GAME_PACKAGE_IMPORT_BYTES) throw new Error(t('package.invalidDataSize'));
     if (!indexedDBAvailable()) throw new Error(t('package.indexedDbUnavailable'));
     const host = metadata.getSnapshot().siteManifest, expected = host?.games[game]?.gameData;
     function expectedData({requireIdentity = false} = {}) {
