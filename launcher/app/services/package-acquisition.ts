@@ -6,6 +6,7 @@ import {componentFileIds} from '../../package/package-generation.mjs';
 import {installPublishedPackage} from '../../package/package-launcher.mjs';
 import {installPackageFromAcquisition, installParsedPackageZip} from '../../package/package-installer.mjs';
 import {parsePackageZip} from '../../package/package-zip.mjs';
+import {parseStoredZip, readStoredZipEntry} from '../../package/stored-zip.mjs';
 import {readCurrentPackageGeneration} from '../../package/package-store.mjs';
 import {adaptLegacyGamePackToPackage} from '../../compat/legacy-package-adapter.mjs';
 import {parseStoredGameDataPack} from '../../compat/legacy-game-pack.mjs';
@@ -263,17 +264,26 @@ export function createPackageAcquisition({metadata, baseUrl, translate: t, fetch
       try {void requestPersistence?.().catch(() => {});} catch {}
       return result.generation;
     }
-    if (typeof file.name === 'string' && rawDataImportMatchesFileName(game, file.name)) {
-      const data = expectedData({requireIdentity: true}), label = game.toUpperCase();
-      if (!rawDataImportSizeMatches(data, file.size)) throw new Error(t('package.rawDataSizeMismatch', {game: label, actual: file.size, expected: data.bytes}));
+    async function installRawData(dataBytes: ArrayBuffer | Uint8Array) {
+      const data = expectedData({requireIdentity: host?.shared.resourceMode !== 'import'}), label = game.toUpperCase();
+      const actualBytes = dataBytes.byteLength;
+      if (typeof data.bytes === 'number' && !rawDataImportSizeMatches(data, actualBytes)) {
+        throw new Error(t('package.rawDataSizeMismatch', {game: label, actual: actualBytes, expected: data.bytes}));
+      }
       progress(request, 'package.validatingRawData', {game: label});
-      const bytes = await file.arrayBuffer(), hash = await deps.hash(new Uint8Array(bytes)); checkPreparationAbort(signal);
-      if (!rawDataImportHashMatches(data, hash)) throw new Error(t('package.rawDataHashMismatch', {game: label}));
-      const descriptor = {...createRawDataImportPackageDescriptor(game, data, hash), gameVersion: version}, id = descriptor.runtimeRequirement!.dataFile;
+      const bytes = dataBytes instanceof Uint8Array ? dataBytes : new Uint8Array(dataBytes);
+      const hash = await deps.hash(bytes); checkPreparationAbort(signal);
+      if (data.sha256 && !rawDataImportHashMatches(data, hash)) throw new Error(t('package.rawDataHashMismatch', {game: label}));
+      const descriptor = {...createRawDataImportPackageDescriptor(game, data, hash,
+        {actualBytes, allowLocalIdentity: host?.shared.resourceMode === 'import'}), gameVersion: version};
+      const id = descriptor.runtimeRequirement!.dataFile;
       progress(request, 'package.installingRawData', {game: label});
       return done(await deps.installAcquired({descriptor, desiredFileIds: [id], source: 'local', reuseCurrent: false,
         acquire: async fileId => {checkPreparationAbort(signal); return fileId === id ? bytes : null;},
         onProgress: value => progress(request, 'package.installingRawDataProgress', {game: label, ...value})}));
+    }
+    if (typeof file.name === 'string' && rawDataImportMatchesFileName(game, file.name)) {
+      return installRawData(await file.arrayBuffer());
     }
     try {
       const parsed = await deps.parseZip(file); checkPreparationAbort(signal);
@@ -287,7 +297,14 @@ export function createPackageAcquisition({metadata, baseUrl, translate: t, fetch
       // descriptor; App-managed execution and FS code exclusion are separate.
       progress(request, 'package.importingSimple');
       return done(await deps.installZip(parsed, {onProgress: value => progress(request, 'package.importingProgress', {...value})}));
-    } catch (error) {if (!/Package ZIP is missing package\.json/.test(preparationErrorText(error))) throw error;}
+    } catch (error) {
+      if (!/Package ZIP is missing package\.json/.test(preparationErrorText(error))) throw error;
+      const entries = await parseStoredZip(file);
+      const rawEntries = [...entries.values()].filter(entry => !entry.name.endsWith('/') &&
+        rawDataImportMatchesFileName(game, entry.name.slice(entry.name.lastIndexOf('/') + 1)));
+      if (rawEntries.length > 1) throw new Error(`${game.toUpperCase()} ZIP contains multiple supported DATA files`);
+      if (rawEntries.length === 1) return installRawData(await readStoredZipEntry(file, rawEntries[0]));
+    }
     const data = expectedData({requireIdentity: host?.shared.resourceMode === 'import'}), legacy = await deps.parseLegacy(file); checkPreparationAbort(signal);
     if (legacy.manifest.game !== game) throw new Error(t('package.legacyWrongGame', {actual: legacy.manifest.game.toUpperCase(), expected: game.toUpperCase()}));
     if (legacy.manifest.data.path !== data.path) throw new Error(t('package.dataPathMismatch'));

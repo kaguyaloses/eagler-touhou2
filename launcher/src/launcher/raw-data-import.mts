@@ -29,14 +29,22 @@ export function createRawDataImportPackageDescriptor(
   game: GameId,
   expected: SiteGameData,
   actualSha256: string,
+  {actualBytes = expected.bytes, allowLocalIdentity = false}: {actualBytes?: number; allowLocalIdentity?: boolean} = {},
 ): PackageDescriptor {
   if (rawDataImportFileNames(game).length === 0) throw new Error(`${game}: raw DATA import is not declared`);
-  if (typeof expected.bytes !== "number" || !expected.version || !expected.sha256) {
+  if (!Number.isSafeInteger(actualBytes) || actualBytes! <= 0 || !/^[a-f0-9]{64}$/i.test(actualSha256)) {
+    throw new Error(`${game}: raw DATA import has an invalid local identity`);
+  }
+  const siteIdentityAvailable = typeof expected.bytes === "number" && !!expected.version && !!expected.sha256;
+  if (!siteIdentityAvailable && !allowLocalIdentity) {
     throw new Error(`${game}: raw DATA import requires a verified site identity`);
   }
-  if (!rawDataImportHashMatches(expected, actualSha256)) throw new Error(`${game}: raw DATA identity does not match Site Manifest`);
+  if (siteIdentityAvailable && (!rawDataImportSizeMatches(expected, actualBytes!) || !rawDataImportHashMatches(expected, actualSha256))) {
+    throw new Error(`${game}: raw DATA identity does not match Site Manifest`);
+  }
   const product = PRODUCT_GAMES[game];
   const dataFileId = product.package.dataFileId;
+  const version = expected.version || `sha256-${actualSha256.toLowerCase()}`;
   return {
     schema: PACKAGE_DESCRIPTOR_SCHEMA,
     game,
@@ -49,10 +57,10 @@ export function createRawDataImportPackageDescriptor(
     },
     files: {
       [dataFileId]: {
-        revision: expected.version,
+        revision: version,
         source: expected.path,
         target: product.package.dataTarget,
-        bytes: expected.bytes,
+        bytes: expected.bytes ?? actualBytes,
       },
     },
     base: { files: [dataFileId] },

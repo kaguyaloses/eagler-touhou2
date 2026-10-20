@@ -31,6 +31,16 @@ assert.equal(await parsed.files.get("entry").blob.text(), "html");
 assert.equal(parsed.files.has("data"), false, "missing declared files must remain absent instead of rejecting the ZIP");
 
 const rawEntries = await parseStoredZip(new Blob([zip]));
+const installFolder = "Touhou 9 - Phantasmagoria of Flower View/";
+const folderZip = new Blob([zipSync({
+  [installFolder]: new Uint8Array(),
+  [`${installFolder}th09.dat`]: strToU8("retail DATA"),
+}, { level: 0 })]);
+const folderEntries = await parseStoredZip(folderZip);
+assert.ok(folderEntries.has(installFolder), "safe directory entries ending in slash are accepted");
+assert.equal(new TextDecoder().decode(await readStoredZipEntry(folderZip, folderEntries.get(`${installFolder}th09.dat`))), "retail DATA");
+const traversalZip = new Blob([zipSync({ "folder/../th09.dat": strToU8("invalid") }, { level: 0 })]);
+await assert.rejects(parseStoredZip(traversalZip), /unsafe ZIP entry name/);
 const corrupted = Uint8Array.from(zip);
 const runtimeEntry = rawEntries.get("games/th08/runtime.html");
 corrupted[runtimeEntry.dataOffset] ^= 0x01;

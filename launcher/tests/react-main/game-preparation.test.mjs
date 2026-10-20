@@ -237,7 +237,7 @@ for (const form of ['runtime', 'runtimes']) test(`main 4018 and original package
   assert.ok(installed.descriptor[form], 'historical declaration remains import data; it is not silently deleted');
 });
 
-test('import-only site accepts prepared Package ZIPs without private DATA hashes and rejects raw DATA imports', async () => {
+test('import-only site accepts prepared Package ZIPs without private DATA hashes', async () => {
   const game = 'th08', product = api.PRODUCT_GAMES[game], {manifest, layout} = importHost(game);
   const files = {
     'game-data': {source: 'content/th08.data', target: product.package.dataTarget, revision: 'a'.repeat(16), bytes: bytes.length},
@@ -258,9 +258,30 @@ test('import-only site accepts prepared Package ZIPs without private DATA hashes
   const installed = await fixture.acquisition.importPackage({game, file: new Blob([zip])});
   assert.equal(importedDescriptor.runtimeRequirement.dataLayout, layout);
   assert.equal(installed.game, game);
-  const rawData = Object.assign(new Blob([bytes]), {name: 'th08.dat'});
-  await assert.rejects(fixture.acquisition.importPackage({game, file: rawData}),
-    error => error.message === t('package.rawDataRequiresZip', {game: game.toUpperCase()}));
+});
+
+test('import-only site extracts TH09 DATA from a directory ZIP and fingerprints it locally', async () => {
+  const game = 'th09', product = api.PRODUCT_GAMES[game], {manifest, layout} = importHost(game);
+  const retailData = new Uint8Array([9, 0, 8, 0, 7, 0]), folder = 'Touhou 9 - Phantasmagoria of Flower View';
+  let installedDescriptor = null, installedBytes = null;
+  const fixture = acquisitionFixture({current: null, hostValue: manifest, dependencies: {installAcquired: async ({descriptor, acquire}) => {
+    installedDescriptor = descriptor;
+    installedBytes = new Uint8Array(await acquire('game-data', descriptor.files['game-data']));
+    return {generation: {id: 'imported-th09-dat', game, descriptor, files: {'game-data': ref('game-data')}}, installation: null};
+  }}});
+  const archive = new Blob([zipSync({
+    [`${folder}/`]: new Uint8Array(),
+    [`${folder}/th09.dat`]: retailData,
+    [`${folder}/thbgm.dat`]: new Uint8Array([1, 2, 3]),
+  }, {level: 0})]);
+  const file = Object.assign(archive, {name: 'Touhou 9 - Phantasmagoria of Flower View.zip'});
+  const installed = await fixture.acquisition.importPackage({game, file});
+  const dataFile = installedDescriptor.files[product.package.dataFileId];
+  assert.equal(installed.game, game);
+  assert.equal(installedDescriptor.runtimeRequirement.dataLayout, layout);
+  assert.equal(dataFile.bytes, retailData.length);
+  assert.equal(dataFile.revision, `sha256-${createHash('sha256').update(retailData).digest('hex')}`);
+  assert.deepEqual(installedBytes, retailData);
 });
 
 test('import-only site accepts prepared Package ZIPs larger than 256 MiB', async () => {

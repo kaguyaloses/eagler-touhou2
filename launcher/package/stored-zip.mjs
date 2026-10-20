@@ -59,6 +59,10 @@ export function isSafeStoredZipName(name) {
   return !name.split("/").some(part => !part || part === "." || part === "..");
 }
 
+function isSafeStoredZipEntryName(name) {
+  return typeof name === "string" && isSafeStoredZipName(name.endsWith("/") ? name.slice(0, -1) : name);
+}
+
 function assertStoredEntry(entry, allowDeflate) {
   if (entry.flags & 0x0001) throw new Error(`${entry.name}: encrypted ZIP entries are not supported`);
   if (entry.method !== 0 && !(allowDeflate && entry.method === 8)) {
@@ -118,7 +122,7 @@ export async function parseStoredZip(blob, { allowDeflate = true } = {}) {
     const next = offset + 46 + nameLength + extraLength + commentLength;
     if (next > centralBytes.byteLength) throw new Error("ZIP central directory entry is truncated");
     const name = textDecoder.decode(centralBytes.subarray(offset + 46, offset + 46 + nameLength));
-    if (!isSafeStoredZipName(name)) throw new Error(`unsafe ZIP entry name: ${name}`);
+    if (!isSafeStoredZipEntryName(name)) throw new Error(`unsafe ZIP entry name: ${name}`);
     if (entries.has(name)) throw new Error(`duplicate ZIP entry: ${name}`);
     const entry = { name, flags, method, crc32, compressedSize, uncompressedSize, localOffset };
     assertStoredEntry(entry, allowDeflate);
