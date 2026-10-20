@@ -25,6 +25,7 @@ param(
     [string] $ArtworkDirectory,
     [string] $FeatureConfig,
     [string] $SiteManifest,
+    [string] $SiteUrl,
     [string[]] $Games,
     [string] $Profile = 'web-validation-package',
     [switch] $SuppressCompletionSummary
@@ -241,6 +242,7 @@ if ($resourceMode -eq 'import') {
         "--profile=$Profile"
     )
     if ($importArtwork) { $nodeArgs += "--artwork-dir=$importArtwork" }
+    if ($SiteUrl) { $nodeArgs += "--site-url=$SiteUrl" }
     if ($runtimeReleasePath) {
         $nodeArgs += "--runtime-release=$runtimeReleasePath"
     } elseif ($Games -contains 'th06') {
@@ -541,6 +543,7 @@ $nodeArgs = @(
     "--games=$([string]::Join(',', $Games))",
     "--profile=$Profile"
 )
+if ($SiteUrl) { $nodeArgs += "--site-url=$SiteUrl" }
 if ($runtimeReleasePath) {
     $nodeArgs += "--runtime-release=$runtimeReleasePath"
 }

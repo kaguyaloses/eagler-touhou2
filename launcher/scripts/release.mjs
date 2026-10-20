@@ -20,13 +20,14 @@ import { WORKSPACE_REPOSITORIES, workspacePath, workspaceRoot } from "../lib/wor
 import { sourceIdentity, writeReleaseManifest } from "../lib/release-manifest.mjs";
 import { sourceProjectRoot } from "../lib/source-layout.mjs";
 import { SITE_MANIFEST_FILE } from "../lib/contracts/site-manifest.mjs";
+import { normalizeSiteUrl } from "../lib/site-metadata.mjs";
 import { verifyReleaseBundle } from "../lib/release-bundle-verifier.mjs";
 
 const project = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const workspace = workspaceRoot();
 function usage() {
   console.log([
-    "node scripts/release.mjs --input=release-input.json --output=NEW_DIRECTORY",
+    "node scripts/release.mjs --input=release-input.json --output=NEW_DIRECTORY [--site-url=https://example.com/]",
     "Input schema: eagler-touhou/release-input/1",
     "The prepare object uses tools/maintainer/assemble-site.ps1 parameter names.",
     "Full hosted inputs are required. This command performs no upload.",
@@ -131,9 +132,10 @@ if (process.argv.includes("--help")) {
   process.exit(0);
 }
 const options = parseOptions(process.argv.slice(2));
-if (!options.input || !options.output || Object.keys(options).some(key => !["input", "output"].includes(key))) {
-  throw new Error("use --input=FILE --output=NEW_DIRECTORY (or --help)");
+if (!options.input || !options.output || Object.keys(options).some(key => !["input", "output", "site-url"].includes(key))) {
+  throw new Error("use --input=FILE --output=NEW_DIRECTORY [--site-url=https://example.com/] (or --help)");
 }
+const siteUrl = normalizeSiteUrl(options["site-url"]);
 
 const inputPath = resolve(options.input);
 const destination = resolve(options.output);
@@ -146,6 +148,7 @@ const plan = normalizeFormalReleaseInput(input, {
 });
 const releaseGames = plan.games;
 const prepare = { ...plan.prepare };
+if (siteUrl) prepare.SiteUrl = siteUrl;
 for (const key of RELEASE_PATH_INPUT_KEYS) {
   if (!prepare[key]) continue;
   if (!existsSync(prepare[key])) throw new Error(`input path missing: ${key}`);
@@ -222,6 +225,7 @@ const importArgs = [
   `--artwork-dir=${resolve(hosted, "assets")}`,
   `--games=${releaseGames.join(",")}`,
   "--profile=web-release-import",
+  ...(siteUrl ? [`--site-url=${siteUrl}`] : []),
 ];
 await runStep(report, "import-build", process.execPath, importArgs);
 await runStep(report, "import-verify", process.execPath, ["scripts/verify-server-build.mjs", importSite]);
@@ -287,6 +291,7 @@ await writeReleaseManifest(incompleteOutput, {
     runtimeBuildProvenance: "verified-runtime-release",
     music: prepare.Music,
     games: releaseGames,
+    ...(siteUrl ? { siteUrl } : {}),
   },
 });
 const manifest = await verifyReleaseBundle(incompleteOutput);

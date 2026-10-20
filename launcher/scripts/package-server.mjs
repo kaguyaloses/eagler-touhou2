@@ -90,6 +90,13 @@ const hostedResources = serverResourceMode === RESOURCE_MODE_HOSTED;
 const externalResources = serverResourceMode === RESOURCE_MODE_EXTERNAL;
 if (args["test-build"] !== undefined && !["0", "1"].includes(args["test-build"])) throw new Error("--test-build must be 0 or 1");
 const testBuild = args["test-build"] === "1";
+if (args["single-player-only"] !== undefined && !["0", "1"].includes(args["single-player-only"])) {
+  throw new Error("--single-player-only must be 0 or 1");
+}
+const singlePlayerOnly = args["single-player-only"] === "1";
+if (singlePlayerOnly && serverResourceMode !== RESOURCE_MODE_IMPORT) {
+  throw new Error("--single-player-only is restricted to import-mode packaging");
+}
 const buildProfile = args.profile;
 const buildAuthority = classifyBuildProfile(buildProfile);
 if (!buildAuthority || buildProfile === "web-development") throw new Error("packaging requires an explicit web-validation-* or web-release-* --profile=NAME");
@@ -130,7 +137,7 @@ const builds = Object.fromEntries(gameIds.flatMap(game => [
   [game, runtimeRelease
     ? resolve(runtimeReleaseRoot, runtimeRelease.games[game].runtime.root)
     : required(`${game}-build`)],
-  ...(PRODUCT_GAMES[game].multiplayerRuntime
+  ...(PRODUCT_GAMES[game].multiplayerRuntime && !singlePlayerOnly
     ? [[`${game}Multiplayer`, runtimeRelease
       ? resolve(runtimeReleaseRoot, runtimeRelease.games[game].multiplayerRuntime.root)
       : required(`${game}-multiplayer-build`)]]
@@ -530,7 +537,7 @@ await rm(staging, { recursive: true, force: true });
 try {
 const hostUiAssets = await copyFrontend();
 const hostManifestPath = args["site-manifest"] ? resolve(args["site-manifest"]) : null;
-if (!hostedResources && !hostManifestPath) {
+if (externalResources && !hostManifestPath) {
   throw new Error(`${serverResourceMode} packaging requires an explicit --site-manifest from a verified hosted build`);
 }
 const manifest = hostManifestPath
@@ -626,7 +633,7 @@ for (const game of gameIds.filter(id => PRODUCT_GAMES[id].runtimeFileLayout === 
   }
   await writeFile(resolve(appRuntimeRoot, "runtime-files.json"), JSON.stringify({ schema: "eagler-touhou/runtime-directory/1", files: declared }, null, 2));
   entry.runtime = `runtime/${game}/${stem}.html?hosted=1&v=${await versionFiles(appRuntimeRoot, names)}`;
-  if (product.multiplayerRuntime) {
+  if (product.multiplayerRuntime && !singlePlayerOnly) {
     const multiplayerBuild = builds[`${game}Multiplayer`];
     const multiplayerDeclared = runtimeRelease?.games[game]?.multiplayerRuntime?.files ||
       JSON.parse(await readFile(resolve(multiplayerBuild, "runtime-files.json"), "utf8")).files;
@@ -656,18 +663,19 @@ for (const game of gameIds.filter(id => PRODUCT_GAMES[id].runtimeFileLayout === 
   };
   if (serverResourceMode === RESOURCE_MODE_IMPORT) {
     const ogg = entry.music?.ogg;
+    entry.gameData = { path: product.package.dataTarget.slice(1), layout: entry.gameData.layout };
     entry.offlineCompatibility = { schema: "eagler-touhou/offline-game-pack/1",
       runtimeCompatibility: { protocol: manifest.protocol, dataLayout: entry.gameData.layout, versionSource: "offline-pack" },
       requiredShared: [...product.requiredShared], languages: { source: "offline-pack", baseline: ["ja"] } };
     entry.music = {
       midi: declaredMidi,
-      ...(ogg ? {
+      ...(ogg && typeof ogg.version === "string" && Array.isArray(ogg.sizes) && Array.isArray(ogg.sha256) ? {
         ogg: {
           version: ogg.version,
           mount: ogg.mount,
           files: ogg.files,
           sizes: ogg.sizes,
-          ...(ogg.sha256 ? { sha256: ogg.sha256 } : {}),
+          sha256: ogg.sha256,
         },
       } : {}),
     };
@@ -767,6 +775,9 @@ for (const game of preloadGames) {
     // every resource mode; DATA, OGG, runtime fonts, language content and user
     // data remain separate. Keep only game-content identity/layout metadata in
     // the compatibility descriptor below.
+    const runtimeDataLayout = entry.gameData.layout ||
+      extractGameDataLayout(await readFile(resolve(appRuntimeRoot, `${game}.js`), "utf8"), game).layout;
+    entry.gameData = { path: product.package.dataTarget.slice(1), layout: runtimeDataLayout };
     entry.offlineCompatibility = {
       schema: "eagler-touhou/offline-game-pack/1",
       runtimeCompatibility: {
@@ -787,12 +798,12 @@ for (const game of preloadGames) {
     const ogg = entry.music?.ogg;
     entry.music = {
       midi: { files: [] },
-      ...(ogg ? { ogg: {
+      ...(ogg && typeof ogg.version === "string" && Array.isArray(ogg.sizes) && Array.isArray(ogg.sha256) ? { ogg: {
         version: ogg.version,
         mount: ogg.mount,
         files: ogg.files,
         sizes: ogg.sizes,
-        ...(ogg.sha256 ? { sha256: ogg.sha256 } : {})
+        sha256: ogg.sha256,
       } } : {})
     };
     continue;

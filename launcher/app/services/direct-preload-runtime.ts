@@ -12,6 +12,7 @@ export function directPreloadRuntimeUrl(plan: {
   if (host.shared.resourceMode !== 'hosted' || product.dataProvider !== 'emscripten-preload' || !game) throw new Error('Host does not authorize this preload Runtime');
   const declared = plan.runtimeVariant === 'multiplayer' ? game.multiplayerRuntime : game.runtime;
   if (!declared) throw new Error('Host does not declare this Runtime variant');
+  if (!game.gameData.version) throw new Error('Host does not declare a verified DATA identity');
   const url = new URL(declared, baseUrl), requested = new URL(plan.entry, baseUrl), base = new URL(baseUrl);
   if (url.href !== requested.href || url.origin !== base.origin || !['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash) throw new Error('Invalid direct preload Runtime source');
   url.searchParams.set('runtimeVariant', plan.runtimeVariant);

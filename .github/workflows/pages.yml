@@ -1,0 +1,66 @@
+name: Deploy GitHub Pages
+'on':
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag containing eagler-touhou-import-site.zip
+        required: true
+        type: string
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Install verification dependencies
+        run: npm ci --ignore-scripts
+        working-directory: launcher
+      - name: Download and validate import site
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          mkdir -p _site .pages-source
+          gh release download "$RELEASE_TAG" --repo "$REPOSITORY" \
+            --pattern eagler-touhou-import-site.zip --dir .pages-source
+          unzip -q .pages-source/eagler-touhou-import-site.zip -d _site
+          repo_name="${REPOSITORY#*/}"
+          owner="${REPOSITORY_OWNER,,}"
+          if [[ "${repo_name,,}" == "${owner}.github.io" ]]; then
+            expected_url="https://${owner}.github.io/"
+          else
+            expected_url="https://${owner}.github.io/${repo_name}/"
+          fi
+          EXPECTED_SITE_URL="$expected_url" node --input-type=module -e '
+            import {readFile} from "node:fs/promises";
+            const deployment = JSON.parse(await readFile("_site/deployment.json", "utf8"));
+            const expected = process.env.EXPECTED_SITE_URL;
+            if (deployment.format !== "eagler-touhou-deployment/1" ||
+                deployment.profile !== "web-release-import" ||
+                deployment.resourceMode !== "import" ||
+                deployment.siteUrl !== expected) {
+              throw new Error(`Expected a web-release-import build for ${expected}`);
+            }
+          '
+          node launcher/scripts/verify-server-build.mjs _site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

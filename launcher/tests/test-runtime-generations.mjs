@@ -93,6 +93,19 @@ try {
   for(const [game,entry] of Object.entries(host.games))for(const field of ["runtime","multiplayerRuntime"])if(entry[field]) {
     assert.equal(parseRuntimeGenerationPath(entry[field].split("?")[0]).generation,runtimeRelease.games[game][field].generation);
   }
+  const singlePlayerOutput = resolve(temp, "single-player-import-site");
+  await command("scripts/package-server.mjs", `--output=${singlePlayerOutput}`, `--runtime-release=${release}`,
+    `--feature-config=${resolve(temp, "features.json")}`, "--profile=web-validation-generations-single-player",
+    "--games=th06,th07,th08,th10", "--music=midi", "--single-player-only=1");
+  await command("scripts/verify-server-build.mjs", singlePlayerOutput);
+  const singlePlayerHost = await json(resolve(singlePlayerOutput, "site-manifest.json"));
+  const singlePlayerDeployment = await json(resolve(singlePlayerOutput, "deployment.json"));
+  assert.ok(Object.values(singlePlayerHost.games).every(entry => !entry.multiplayerRuntime),
+    "single-player import site must not advertise multiplayer Runtimes");
+  assert.ok(!singlePlayerDeployment.files.some(file => file.path.includes("/multiplayer/")),
+    "single-player import site must not publish multiplayer Runtime files");
+  assert.ok(Object.values(singlePlayerHost.games).every(entry => entry.gameData.sha256 === undefined && entry.gameData.bytes === undefined),
+    "import-only site must not publish original game file identities");
   const generations=catalog.groups.map(group=>group.current.generation);
   await command("scripts/refresh-deployment-app-shell.mjs",output,"--frontend");
   assert.deepEqual((await readRuntimeManifest(output)).groups.map(group=>group.current.generation),generations,"Launcher-only refresh does not rebuild game generations");

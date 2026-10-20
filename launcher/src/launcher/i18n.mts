@@ -581,6 +581,7 @@ const entries = [
   ["package.rawDataSizeMismatch", "{game} 原版数据大小不匹配：{actual}/{expected}", "{game} original data size mismatch: {actual}/{expected}"],
   ["package.validatingRawData", "正在校验 {game} 原版数据…", "Validating original {game} data…"],
   ["package.rawDataHashMismatch", "{game} 原版数据 SHA-256 校验失败", "{game} original data SHA-256 validation failed"],
+  ["package.rawDataRequiresZip", "{game} 此站点需要导入已准备好的游戏包 ZIP", "{game} requires a prepared game-package ZIP on this site"],
   ["package.installingRawData", "正在安装 {game} 游戏数据…", "Installing {game} game data…"],
   ["package.installingRawDataProgress", "正在安装 {game} 游戏数据… {completed}/{total}", "Installing {game} game data… {completed}/{total}"],
   ["package.wrongGame", "这个游戏包属于 {actual}，不是 {expected}", "This game package belongs to {actual}, not {expected}"],

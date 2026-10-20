@@ -255,6 +255,22 @@ for (const game of gameIds.filter(id => PRODUCT_GAMES[id].runtimeFileLayout === 
   assertRuntimeDataShell(shell, game, "normal");
   const identity = entry.gameData;
   const dataPath = product.package.dataTarget.slice(1);
+  const importOnlyWithoutIdentity = resourceMode === RESOURCE_MODE_IMPORT &&
+    identity?.bytes == null && identity?.sha256 == null && identity?.version == null;
+  if (importOnlyWithoutIdentity) {
+    const requiredShared = entry.offlineCompatibility?.requiredShared;
+    const expectedShared = PRODUCT_GAMES[game].requiredShared || [];
+    if (identity.path !== dataPath || !/^sha256-[a-f0-9]{64}$/.test(identity.layout || "") ||
+        entry.offlineCompatibility?.runtimeCompatibility?.dataLayout !== identity.layout ||
+        !Array.isArray(requiredShared) || requiredShared.length !== expectedShared.length ||
+        expectedShared.some(target => !requiredShared.includes(target))) {
+      throw new Error(`${game}: invalid import-only DATA layout or compatibility`);
+    }
+    for (const pack of Object.values(entry.music || {})) {
+      if (pack?.base != null) throw new Error(`${game}: import manifest must not expose a music base URL`);
+    }
+    continue;
+  }
   if (!Number.isSafeInteger(identity?.bytes) || identity.bytes <= 0 || !/^[a-f0-9]{64}$/.test(identity.sha256) ||
       identity.path !== dataPath || identity.version !== `sha256-${identity.sha256}`) throw new Error(`${game}: invalid DATA identity`);
   if (!product.musicCapabilities.midi && entry.music?.midi?.supported !== false) {
@@ -363,10 +379,15 @@ for (const game of preloadGames) {
     if (!entry?.music?.midi || typeof entry.runtime !== "string" || !versionedRuntime(entry.runtime)) {
       throw new Error(`invalid ${resourceMode} game entry: ${game}`);
     }
-    if (typeof entry.gameData?.version !== "string" || !/^sha256-[a-f0-9]{64}$/i.test(entry.gameData.version) ||
-        typeof entry.gameData?.layout !== "string" || !/^sha256-[a-f0-9]{64}$/i.test(entry.gameData.layout) ||
-        entry.gameData?.path !== dataPath || !Number.isInteger(entry.gameData?.bytes) || entry.gameData.bytes <= 0 ||
-        !/^[a-f0-9]{64}$/i.test(entry.gameData?.sha256 || "")) {
+    const identity = entry.gameData;
+    const hasDataIdentity = identity?.bytes != null || identity?.sha256 != null || identity?.version != null;
+    const validData = !hasDataIdentity
+      ? typeof identity?.layout === "string" && /^sha256-[a-f0-9]{64}$/i.test(identity.layout) && identity.path === dataPath
+      : typeof identity?.version === "string" && /^sha256-[a-f0-9]{64}$/i.test(identity.version) &&
+        typeof identity?.layout === "string" && /^sha256-[a-f0-9]{64}$/i.test(identity.layout) &&
+        identity.path === dataPath && Number.isInteger(identity.bytes) && identity.bytes > 0 &&
+        /^[a-f0-9]{64}$/i.test(identity.sha256 || "");
+    if (!validData) {
       throw new Error(`invalid ${resourceMode} game data identity: ${game}`);
     }
     const compatibility = entry.offlineCompatibility;

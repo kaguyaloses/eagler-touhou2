@@ -136,7 +136,7 @@ export function createPackageAcquisition({metadata, baseUrl, translate: t, fetch
   }
   function developmentDescriptor(game: GameId, host: SiteManifest): PackageDescriptor | null {
     const hosted = host.games[game], data = hosted?.gameData;
-    if (!hosted || !data?.source) return null;
+    if (!hosted || !data?.source || !data.version || data.bytes == null || !data.sha256) return null;
     const files: PackageDescriptor['files'] = {'game-data': {revision: data.version, source: 'game-data', target: `/${data.path}`, bytes: data.bytes, sha256: data.sha256}};
     const ogg = hosted.music.ogg, mount = PRODUCT_GAMES[game].package.musicMounts.ogg || '/bgm-ogg';
     const entries = Array.isArray(ogg?.files) && Array.isArray(ogg?.sizes) && Array.isArray(ogg?.sha256)
@@ -249,14 +249,20 @@ export function createPackageAcquisition({metadata, baseUrl, translate: t, fetch
     if (!(file instanceof Blob) || file.size <= 0 || file.size > 256 * 1024 * 1024) throw new Error(t('package.invalidDataSize'));
     if (!indexedDBAvailable()) throw new Error(t('package.indexedDbUnavailable'));
     const host = metadata.getSnapshot().siteManifest, expected = host?.games[game]?.gameData;
-    function expectedData() {if (!expected) throw new Error(t('runtime.dataDescriptorMissing', {game})); return expected;}
+    function expectedData({requireIdentity = false} = {}) {
+      if (!expected) throw new Error(t('runtime.dataDescriptorMissing', {game}));
+      if (requireIdentity && (expected.bytes == null || !expected.sha256 || !expected.version)) {
+        throw new Error(t('package.rawDataRequiresZip', {game: game.toUpperCase()}));
+      }
+      return expected;
+    }
     async function done(result: InstalledPackageResult) {
       checkPreparationAbort(signal); await installedChanged(game);
       try {void requestPersistence?.().catch(() => {});} catch {}
       return result.generation;
     }
     if (typeof file.name === 'string' && rawDataImportMatchesFileName(game, file.name)) {
-      const data = expectedData(), label = game.toUpperCase();
+      const data = expectedData({requireIdentity: true}), label = game.toUpperCase();
       if (!rawDataImportSizeMatches(data, file.size)) throw new Error(t('package.rawDataSizeMismatch', {game: label, actual: file.size, expected: data.bytes}));
       progress(request, 'package.validatingRawData', {game: label});
       const bytes = await file.arrayBuffer(), hash = await deps.hash(new Uint8Array(bytes)); checkPreparationAbort(signal);
@@ -280,7 +286,7 @@ export function createPackageAcquisition({metadata, baseUrl, translate: t, fetch
       progress(request, 'package.importingSimple');
       return done(await deps.installZip(parsed, {onProgress: value => progress(request, 'package.importingProgress', {...value})}));
     } catch (error) {if (!/Package ZIP is missing package\.json/.test(preparationErrorText(error))) throw error;}
-    const data = expectedData(), legacy = await deps.parseLegacy(file); checkPreparationAbort(signal);
+    const data = expectedData({requireIdentity: host?.shared.resourceMode === 'import'}), legacy = await deps.parseLegacy(file); checkPreparationAbort(signal);
     if (legacy.manifest.game !== game) throw new Error(t('package.legacyWrongGame', {actual: legacy.manifest.game.toUpperCase(), expected: game.toUpperCase()}));
     if (legacy.manifest.data.path !== data.path) throw new Error(t('package.dataPathMismatch'));
     if (host?.shared.resourceMode === 'import' && !legacy.offline) throw new Error(t('package.serverNoContent'));

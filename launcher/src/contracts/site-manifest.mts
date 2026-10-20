@@ -20,9 +20,9 @@ export const SITE_MANIFEST_FILE = "site-manifest.json";
 
 export interface SiteGameData {
   path: string;
-  bytes: number;
-  sha256: string;
-  version: string;
+  bytes?: number;
+  sha256?: string;
+  version?: string;
   layout: string;
   /** Development-only source path used to seed the local Package Store. */
   source?: string;
@@ -226,14 +226,16 @@ function validGame(gameId: string, value: unknown, resourceMode: ResourceMode): 
       (!("multiplayerRuntime" in product) || typeof value.multiplayerRuntime !== "string" || !value.multiplayerRuntime)) return false;
   const expectedDataPath = product.package.dataTarget.slice(1);
   const packagePointer = value.package;
+  const hasDataIdentity = gameData.version != null || gameData.bytes != null || gameData.sha256 != null;
+  const validDataIdentity = resourceMode === RESOURCE_MODE_IMPORT && !hasDataIdentity ||
+    typeof gameData.version === "string" && SHA256_VERSION.test(gameData.version) &&
+    Number.isSafeInteger(gameData.bytes) && Number(gameData.bytes) > 0 &&
+    typeof gameData.sha256 === "string" && SHA256.test(gameData.sha256);
   const validExternalPackage = resourceMode !== RESOURCE_MODE_EXTERNAL ||
     (isRecord(packagePointer) && typeof packagePointer.revision === "string" && /^[a-f0-9]{16}$/i.test(packagePointer.revision) &&
       typeof packagePointer.descriptor === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]*\.package\.json$/i.test(packagePointer.descriptor));
-  return typeof gameData.version === "string" && SHA256_VERSION.test(gameData.version) &&
-    typeof gameData.layout === "string" && SHA256_VERSION.test(gameData.layout) &&
+  return validDataIdentity && typeof gameData.layout === "string" && SHA256_VERSION.test(gameData.layout) &&
     gameData.path === expectedDataPath &&
-    Number.isSafeInteger(gameData.bytes) && Number(gameData.bytes) > 0 &&
-    typeof gameData.sha256 === "string" && SHA256.test(gameData.sha256) &&
     validExternalPackage && validHostRuntimeFeatures(value.features) && validOggManifest(music.ogg) &&
     validLanguageCatalogs(value) &&
     validOfflineCompatibility(value, resourceMode, gameId);

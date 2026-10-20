@@ -21,7 +21,8 @@ export function rawDataImportSizeMatches(expected: SiteGameData, actualBytes: nu
 }
 
 export function rawDataImportHashMatches(expected: SiteGameData, actualSha256: string): boolean {
-  return /^[a-f0-9]{64}$/i.test(actualSha256) && actualSha256.toLowerCase() === expected.sha256.toLowerCase();
+  return typeof expected.sha256 === "string" && /^[a-f0-9]{64}$/i.test(actualSha256) &&
+    actualSha256.toLowerCase() === expected.sha256.toLowerCase();
 }
 
 export function createRawDataImportPackageDescriptor(
@@ -30,6 +31,9 @@ export function createRawDataImportPackageDescriptor(
   actualSha256: string,
 ): PackageDescriptor {
   if (rawDataImportFileNames(game).length === 0) throw new Error(`${game}: raw DATA import is not declared`);
+  if (typeof expected.bytes !== "number" || !expected.version || !expected.sha256) {
+    throw new Error(`${game}: raw DATA import requires a verified site identity`);
+  }
   if (!rawDataImportHashMatches(expected, actualSha256)) throw new Error(`${game}: raw DATA identity does not match Site Manifest`);
   const product = PRODUCT_GAMES[game];
   const dataFileId = product.package.dataFileId;

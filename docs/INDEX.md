@@ -83,6 +83,7 @@
 | Launcher | [launcher/docs/EXTERNAL_RESOURCE_MODE.md](../launcher/docs/EXTERNAL_RESOURCE_MODE.md) | 外置资源模式 |
 | Launcher | [launcher/docs/FAQ.md](../launcher/docs/FAQ.md) | 常见问题 |
 | Launcher | [launcher/docs/GAME_ADAPTER_CONTRACT.md](../launcher/docs/GAME_ADAPTER_CONTRACT.md) | Game Adapter 契约入口 |
+| Launcher | [launcher/docs/GITHUB_PAGES.md](../launcher/docs/GITHUB_PAGES.md) | GitHub Pages 发布 |
 | Launcher | [launcher/docs/PWA.md](../launcher/docs/PWA.md) | 安装与离线使用 |
 | Launcher | [launcher/docs/README.md](../launcher/docs/README.md) | 启动器文档 |
 | Launcher | [launcher/docs/RELEASE.md](../launcher/docs/RELEASE.md) | 发布候选 |

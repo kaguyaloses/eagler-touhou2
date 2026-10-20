@@ -52,6 +52,26 @@ assert.equal(hosted.shared.resourceMode, "hosted");
 assert.equal(SITE_MANIFEST_FILE, "site-manifest.json");
 assert.equal(siteOriginMigrationAvailable(hosted, "https:"), false);
 
+const importOnly = validateSiteManifest({
+  ...hosted,
+  shared: { resourceMode: "import" },
+  games: { th06: {
+    ...game,
+    gameData: { path: "th06.data", layout: `sha256-${"b".repeat(64)}` },
+    offlineCompatibility: {
+      schema: "eagler-touhou/offline-game-pack/1",
+      runtimeCompatibility: { protocol: "eagler-touhou/1", dataLayout: `sha256-${"b".repeat(64)}`, versionSource: "offline-pack" },
+      requiredShared: ["/msgothic.ttc", "/unifont.otf"],
+      languages: { source: "offline-pack", baseline: ["ja"] },
+    },
+  } },
+});
+assert.equal(importOnly.games.th06.gameData.sha256, undefined);
+assert.throws(() => validateSiteManifest({
+  ...hosted,
+  games: { th06: { ...game, gameData: { path: "th06.data", layout: `sha256-${"b".repeat(64)}` } } },
+}), /games/);
+
 const migrationHost = validateSiteManifest({
   ...hosted,
   shared: { ...hosted.shared, originMigration: { mode: "http-to-https" } },

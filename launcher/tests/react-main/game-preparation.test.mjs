@@ -80,6 +80,21 @@ function host(extra = {}) {
     games: {th06: {runtime: './runtime/th06/th06.html', gameData: {path: 'th06.data', bytes: bytes.length, sha256: hash,
       version: `sha256-${hash}`, layout: `sha256-${'b'.repeat(64)}`}, music: {midi: {files: []}}, ...extra}}});
 }
+function importHost(game = 'th08') {
+  const product = api.PRODUCT_GAMES[game], layout = `sha256-${'c'.repeat(64)}`;
+  return {manifest: api.validateSiteManifest({schema: 'eagler-touhou/site-manifest/1', protocol: 'eagler-touhou/1', profile: 'web-release-import',
+    shared: {resourceMode: 'import'},
+    games: {[game]: {
+      number: product.number, title: product.title, subtitle: product.subtitle,
+      runtime: `runtime/${game}/${game}.html`,
+      gameData: {path: product.package.dataTarget.slice(1), layout},
+      features: {thprac: false, focusHitbox: false},
+      music: {midi: {files: []}}, languages: [], languageOptions: [{id: 'ja', title: 'Japanese', pack: null}],
+      offlineCompatibility: {schema: 'eagler-touhou/offline-game-pack/1',
+        runtimeCompatibility: {protocol: 'eagler-touhou/1', dataLayout: layout, versionSource: 'offline-pack'},
+        requiredShared: product.requiredShared, languages: {source: 'offline-pack', baseline: ['ja']}},
+    }}}), layout};
+}
 function catalog(revision = 'package-r1') {return {schema: 'eagler-touhou/release-catalog/1', games: {th06: {revision, descriptor: 'games/th06/package.json'}}};}
 function acquisitionFixture({current = generation(), hostValue = null, catalogValue = null, dependencies = {}, fetchImpl, network,
   initialize = async () => {}} = {}) {
@@ -220,6 +235,32 @@ for (const form of ['runtime', 'runtimes']) test(`main 4018 and original package
   const installed = await f.acquisition.importPackage({game: 'th06', file: new Blob([zip])});
   assert.ok(parsed.descriptor[form]); assert.deepEqual(api.packageResourceIds(installed), ['font', 'unicode']);
   assert.ok(installed.descriptor[form], 'historical declaration remains import data; it is not silently deleted');
+});
+
+test('import-only site accepts prepared Package ZIPs without private DATA hashes and rejects raw DATA imports', async () => {
+  const game = 'th08', product = api.PRODUCT_GAMES[game], {manifest, layout} = importHost(game);
+  const files = {
+    'game-data': {source: 'content/th08.data', target: product.package.dataTarget, revision: 'a'.repeat(16), bytes: bytes.length},
+    'shared-msgothic': {source: 'shared/msgothic.ttc', target: '/msgothic.ttc', revision: 'b'.repeat(16), bytes: bytes.length},
+    'shared-unifont': {source: 'shared/unifont.otf', target: '/unifont.otf', revision: 'c'.repeat(16), bytes: bytes.length},
+  };
+  const descriptor = {schema: 'eagler-touhou/package/1', game, revision: 'd'.repeat(16),
+    runtimeRequirement: {protocol: 'eagler-touhou/1', target: game, dataFile: 'game-data', dataLayout: layout},
+    files, base: {files: Object.keys(files)}, components: {}};
+  let importedDescriptor = null;
+  const fixture = acquisitionFixture({current: null, hostValue: manifest, dependencies: {installZip: async parsed => {
+    importedDescriptor = parsed.descriptor;
+    return {generation: {id: 'imported-th08', game, descriptor: parsed.descriptor,
+      files: Object.fromEntries(Object.keys(parsed.descriptor.files).map(id => [id, ref(id)]))}, installation: null};
+  }}});
+  const zip = zipSync({'package.json': strToU8(JSON.stringify(descriptor)),
+    'content/th08.data': bytes, 'shared/msgothic.ttc': bytes, 'shared/unifont.otf': bytes}, {level: 0});
+  const installed = await fixture.acquisition.importPackage({game, file: new Blob([zip])});
+  assert.equal(importedDescriptor.runtimeRequirement.dataLayout, layout);
+  assert.equal(installed.game, game);
+  const rawData = Object.assign(new Blob([bytes]), {name: 'th08.dat'});
+  await assert.rejects(fixture.acquisition.importPackage({game, file: rawData}),
+    error => error.message === t('package.rawDataRequiresZip', {game: game.toUpperCase()}));
 });
 
 test('main 5948: hosted preload retains validated authority and asset URL without fake Package generation', async () => {

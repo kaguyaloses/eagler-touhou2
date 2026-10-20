@@ -13,6 +13,7 @@ const TH06_ARCHIVES = Object.freeze([
 // never points at a workstation build, asset directory, or generated identity.
 export const PRODUCT_CONTENT = Object.freeze({
   th06: Object.freeze({
+    dataLayout: "sha256-76aa8caba0fe81153fb27d4f46ab2bbb37288526fc3507b98702687c949d6e00",
     original: Object.freeze({
       files: TH06_ARCHIVES,
       oggSourceFiles: Object.freeze(Array.from({ length: 17 }, (_, index) => `bgm/th06_${String(index + 1).padStart(2, "0")}.wav`)),
@@ -48,6 +49,7 @@ export const PRODUCT_CONTENT = Object.freeze({
     }),
   }),
   th07: Object.freeze({
+    dataLayout: "sha256-4b437bfce0ee44c23ab95d7ede7a00cfefdf980df10a006c6e2ab9875c183433",
     original: Object.freeze({
       files: Object.freeze(["th07.dat"]),
       oggSourceFiles: Object.freeze(["thbgm.dat"]),
